@@ -340,6 +340,11 @@ textarea.small{min-height:70px;background:var(--sheet);line-height:1.5}
 .dtin{padding:0 18px 16px;display:grid;gap:10px}
 label.btn{display:inline-block}
 .chip.cont{border-top-left-radius:0;border-bottom-left-radius:0;border-left-style:dotted}
+li.td{align-items:flex-start}
+li.td input[type=checkbox]{margin-top:4px}
+li.td .tdfrom{padding-top:3px}
+textarea.tdnote{min-height:60px;margin-top:4px}
+li.done .evnote{color:var(--done)}
 /* activity */
 .act{border:1px solid var(--rule);border-radius:10px;padding:16px;margin-top:14px;display:grid;gap:14px}
 .stats{display:flex;gap:32px;flex-wrap:wrap}
@@ -742,6 +747,7 @@ function renderWeek(){
 function li(cls){return el("li","row"+(cls?" "+cls:""))}
 function xbtn(label,fn){const b=el("button","x","×");b.type="button";b.setAttribute("aria-label","Delete "+label);b.addEventListener("click",ev=>{ev.stopPropagation();fn()});return b}
 function stop(b,fn){b.type="button";b.addEventListener("click",ev=>{ev.stopPropagation();fn()});return b}
+let openTdNote=null;
 function renderDay(){
   const d=parse(selK),v=get(selK);
   $("dbig").textContent=MN[d.getMonth()].slice(0,3)+" "+d.getDate();
@@ -786,10 +792,18 @@ function renderDay(){
   });
   const tl=$("tdList");tl.textContent="";
   if(!v.todos.length)tl.appendChild(el("li","empty","Nothing to do yet."));
-  v.todos.forEach(t=>{const l=li(t.done?"done":"");const c=el("input");c.type="checkbox";c.checked=!!t.done;c.id="td-"+t.id;
+  v.todos.forEach(t=>{const l=li("td"+(t.done?" done":""));const c=el("input");c.type="checkbox";c.checked=!!t.done;c.id="td-"+t.id;
     c.addEventListener("change",()=>change(selK,v=>{const z=v.todos.find(z=>z.id===t.id);if(z)z.done=c.checked}));
-    const lab=el("label","txt",t.text);lab.htmlFor=c.id;
-    l.append(c,lab);if(t.from)l.appendChild(el("span","tdfrom","from "+short(t.from)));
+    const main=el("div","evmain");const lab=el("label","txt",t.text);lab.htmlFor=c.id;main.appendChild(lab);
+    if(openTdNote===t.id){
+      const ta=el("textarea","small tdnote");ta.id="tn-"+t.id;ta.value=t.note||"";ta.placeholder="Add a comment";ta.setAttribute("aria-label","Comment for "+t.text);
+      const save=()=>{const val=ta.value.trim();openTdNote=null;if(val===(t.note||"")){renderDay();return}change(selK,v=>{const z=v.todos.find(z=>z.id===t.id);if(z)z.note=val})};
+      ta.addEventListener("keydown",ev=>{if(ev.key==="Escape"){openTdNote=null;renderDay()}});
+      const row=el("div","frow");row.append(stop(el("button","btn sm","Save"),save),stop(el("button","btn ghost sm","Cancel"),()=>{openTdNote=null;renderDay()}));
+      main.append(ta,row);setTimeout(()=>{ta.focus()},0);
+    }else if(t.note)main.appendChild(el("div","evnote",t.note));
+    l.append(c,main);if(t.from)l.appendChild(el("span","tdfrom","from "+short(t.from)));
+    if(openTdNote!==t.id){const nb=stop(el("button","x small",t.note?"Edit":"Comment"),()=>{openTdNote=t.id;renderDay()});nb.setAttribute("aria-label",(t.note?"Edit comment for ":"Add a comment to ")+t.text);l.appendChild(nb)}
     l.appendChild(xbtn(t.text,()=>change(selK,v=>{v.todos=v.todos.filter(z=>z.id!==t.id)})));tl.appendChild(l)});
   const memo=$("memo");if(document.activeElement!==memo||memo.dataset.k!==selK){memo.value=v.memo||"";memo.dataset.k=selK}
 }
@@ -1026,7 +1040,7 @@ function renderSearch(){
     res.push({k,kind:"Repeat",text:r.title,sub:repeatLabel(r)+(r.note?" · "+r.note:"")})});
   [...days.keys()].sort().reverse().forEach(k=>{const v=days.get(k);
     v.events.forEach(e=>{if(!e.private&&(e.title+" "+e.note).toLowerCase().includes(q))res.push({k,kind:"Event",text:e.title,sub:timeLabel(e)+(e.endDate?" through "+short(e.endDate):"")+(e.note?" · "+e.note:"")})});
-    v.todos.forEach(t=>{if(t.text.toLowerCase().includes(q))res.push({k,kind:"To-do",text:t.text,sub:t.done?"Done":"Open"})});
+    v.todos.forEach(t=>{if((t.text+" "+(t.note||"")).toLowerCase().includes(q))res.push({k,kind:"To-do",text:t.text,sub:(t.done?"Done":"Open")+(t.note?" · "+t.note:"")})});
     if((v.memo||"").toLowerCase().includes(q))res.push({k,kind:"Note",text:snippet(v.memo,q),sub:""})});
   $("resCount").textContent=res.length?res.length+" result"+(res.length>1?"s":""):"No matches";
   res.slice(0,60).forEach(r=>{const b=el("button","res");b.type="button";
