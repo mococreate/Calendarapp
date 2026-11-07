@@ -525,6 +525,7 @@ label.btn{display:inline-block}
 const HOL={"2026-01-01":"New Year's Day","2026-01-12":"Coming of Age Day","2026-02-11":"National Foundation Day","2026-02-23":"Emperor's Birthday","2026-03-20":"Vernal Equinox Day","2026-04-29":"Showa Day","2026-05-03":"Constitution Day","2026-05-04":"Greenery Day","2026-05-05":"Children's Day","2026-05-06":"Substitute Holiday","2026-07-20":"Marine Day","2026-08-11":"Mountain Day","2026-09-21":"Respect for the Aged Day","2026-09-22":"Citizens' Holiday","2026-09-23":"Autumnal Equinox Day","2026-10-12":"Sports Day","2026-11-03":"Culture Day","2026-11-23":"Labor Thanksgiving Day",
 "2027-01-01":"New Year's Day","2027-01-11":"Coming of Age Day","2027-02-11":"National Foundation Day","2027-02-23":"Emperor's Birthday","2027-03-21":"Vernal Equinox Day","2027-03-22":"Substitute Holiday","2027-04-29":"Showa Day","2027-05-03":"Constitution Day","2027-05-04":"Greenery Day","2027-05-05":"Children's Day","2027-07-19":"Marine Day","2027-08-11":"Mountain Day","2027-09-20":"Respect for the Aged Day","2027-09-23":"Autumnal Equinox Day","2027-10-11":"Sports Day","2027-11-03":"Culture Day","2027-11-23":"Labor Thanksgiving Day"};
 const WD=["SUN","MON","TUE","WED","THU","FRI","SAT"];
+const ORDER=[1,2,3,4,5,6,0]; // weeks start on Monday
 const WDL=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const MN=["January","February","March","April","May","June","July","August","September","October","November","December"];
 const COLORS=[["blush","Blush pink"],["pink","Pink"],["raspberry","Raspberry"],["gray","Gray"]];
@@ -581,7 +582,7 @@ const isHidden=e=>e.private&&!revealed.has(e.id);
 const shownTitle=e=>isHidden(e)?"Private":e.title;
 const goalOf=id=>id?goals.find(g=>g.id===id):null;
 function timeLabel(e){return e.allDay?"All day":(e.start||"")+(e.end?"–"+e.end:"")}
-function repeatLabel(r){if(r.freq==="daily")return"Every day";return"Every "+[...r.days].sort((a,b)=>a-b).map(d=>WDL[d].slice(0,3)).join(", ")}
+function repeatLabel(r){if(r.freq==="daily")return"Every day";return"Every "+[...r.days].sort((a,b)=>(a+6)%7-(b+6)%7).map(d=>WDL[d].slice(0,3)).join(", ")}
 function setStatus(s,t){const e=$("status");e.dataset.s=s;e.querySelector("span").textContent=t}
 
 // ---- save ----
@@ -641,8 +642,8 @@ function renderMini(){
   const y=view.getFullYear(),m=view.getMonth(),g=$("gridSmall");
   $("mName").textContent=MN[m];$("mYear").textContent=y;
   g.textContent="";
-  WD.forEach((w,i)=>g.appendChild(el("div","dow"+(i===0?" su":i===6?" sa":""),w)));
-  const first=new Date(y,m,1).getDay(),weeks=Math.ceil((first+new Date(y,m+1,0).getDate())/7);
+  ORDER.forEach(i=>g.appendChild(el("div","dow"+(i===0?" su":i===6?" sa":""),WD[i])));
+  const first=(new Date(y,m,1).getDay()+6)%7,weeks=Math.ceil((first+new Date(y,m+1,0).getDate())/7);
   for(let i=0;i<weeks*7;i++){
     const d=new Date(y,m,1-first+i),k=key(d),v=get(k),dw=d.getDay(),evs=eventsOn(k);
     const b=el("button","cell"+(d.getMonth()!==m?" out":"")+(dw===0?" su":dw===6?" sa":"")+(HOL[k]?" hol":"")+(k===selK?" sel":""));b.type="button";
@@ -654,14 +655,14 @@ function renderMini(){
     if(evs.length){const ds=el("div","dots");evs.slice(0,4).forEach(e=>{const o=el("b");o.style.setProperty("--c",isHidden(e)?"var(--c-gray)":cvar(e.color));ds.appendChild(o)});b.appendChild(ds)}
     const open=v.todos.filter(t=>!t.done).length;
     if(open)b.appendChild(el("div","tdc","☐ "+open+" to-do"));
-    b.addEventListener("click",()=>{selK=k;view=new Date(d.getFullYear(),d.getMonth(),1);if(!editT)resetForm();render();toPanel()});
+    b.addEventListener("click",()=>{selK=k;view=new Date(d.getFullYear(),d.getMonth(),1);if(!editT)resetForm();render()});
     g.appendChild(b);
   }
 }
 
 // ---- week ----
 let weekCols=[],drag=null,justDragged=false;
-function weekStart(){const d=parse(selK);return addDays(d,-d.getDay())}
+function weekStart(){const d=parse(selK);return addDays(d,-((d.getDay()+6)%7))}
 function toPanel(){if(matchMedia("(max-width:820px)").matches){const p=$("dayPanel");setTimeout(()=>p.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"}),30)}}
 function openDay(k,ev){const moved=selK!==k;selK=k;const d=parse(k);view=new Date(d.getFullYear(),d.getMonth(),1);if(moved&&!ev&&editT)resetForm();if(mode==="week")render();else setMode("day");if(ev)startEdit(ev);toPanel()}
 function blockClick(k,e){if(justDragged)return;if(isHidden(e)){revealed.add(e.id);render();return}openDay(k,e)}
@@ -695,7 +696,7 @@ function renderWeek(){
   const head=$("wkHead"),body=$("wkBody"),list=$("wkList");head.textContent="";body.textContent="";list.textContent="";weekCols=[];
   head.appendChild(el("div"));
   const ks=[...Array(7)].map((_,i)=>key(addDays(ws,i)));
-  ks.forEach((k,i)=>{const d=parse(k);
+  ks.forEach((k,i)=>{const d=parse(k);i=d.getDay();
     const h=el("button","hd"+(i===0?" su":i===6?" sa":"")+(HOL[k]?" hol":"")+(k===todayK?" today":"")+(k===selK?" sel":""));h.type="button";
     h.setAttribute("aria-label","Open "+WDL[i]+", "+MN[d.getMonth()]+" "+d.getDate());
     h.append(el("div","w",WD[i]),el("div","n",d.getDate()));if(HOL[k])h.appendChild(el("div","h",HOL[k]));
@@ -728,7 +729,7 @@ function renderWeek(){
     if(k===todayK){const m=now.getHours()*60+now.getMinutes();if(m>=H0*60){const n=el("div","nowline");n.style.top=((m-H0*60)/60*hh)+"px";c.appendChild(n)}}
     body.appendChild(c);
   });
-  ks.forEach((k,i)=>{const d=parse(k),row=el("div","wlday"+(k===todayK?" today":"")+(k===selK?" sel":""));row.tabIndex=0;
+  ks.forEach((k,i)=>{i=parse(k).getDay();const d=parse(k),row=el("div","wlday"+(k===todayK?" today":"")+(k===selK?" sel":""));row.tabIndex=0;
     const cls=i===0||HOL[k]?"su":i===6?"sa":"";
     const dn=el("div","dn");dn.append(el("small",cls,WD[i]),el("b",cls,d.getDate()));
     const it=el("div","items");const evs=eventsOn(k);
@@ -794,7 +795,7 @@ function renderDay(){
 }
 
 // ---- event form ----
-WD.forEach((w,i)=>{const l=el("label","wd");const c=el("input");c.type="checkbox";c.id="wd-"+i;c.value=i;c.setAttribute("aria-label",WDL[i]);
+ORDER.forEach(i=>{const w=WD[i];const l=el("label","wd");const c=el("input");c.type="checkbox";c.id="wd-"+i;c.value=i;c.setAttribute("aria-label",WDL[i]);
   l.append(c,el("span","",w.charAt(0)+w.slice(1).toLowerCase()));$("evDays").appendChild(l)});
 function swatches(box,name,prefix){COLORS.forEach(([c,n],i)=>{const l=el("label");l.title=n;
   const r=el("input");r.type="radio";r.name=name;r.value=c;r.id=prefix+c;r.setAttribute("aria-label",n);if(i===0)r.checked=true;
@@ -912,7 +913,7 @@ function renderActivity(){
   let cur=0,d=val(todayK)>0?parse(todayK):addDays(parse(todayK),-1);
   while(val(key(d))>0){cur++;d=addDays(d,-1)}
   let best=0,run=0,prev=null;[...m.keys()].filter(k=>val(k)>0).sort().forEach(k=>{run=prev&&dayDiff(prev,k)===1?run+1:1;best=Math.max(best,run);prev=k});
-  const ws=addDays(parse(todayK),-parse(todayK).getDay());let wh=0,wn=0;
+  const ws=addDays(parse(todayK),-((parse(todayK).getDay()+6)%7));let wh=0,wn=0;
   for(let i=0;i<7;i++){const o=m.get(key(addDays(ws,i)));if(o){wh+=o.h;wn+=o.n}}
   const act=el("div","act");
   const stats=el("div","stats");
@@ -925,7 +926,7 @@ function renderActivity(){
   const wrap=el("div","heatwrap"),inn=el("div","heatin");
   const months=el("div","hmonths");let lastM=-1;
   for(let w=0;w<WEEKS;w++){const dd=addDays(start,w*7);const lab=el("span","",dd.getMonth()!==lastM?MN[dd.getMonth()].slice(0,3):"");lastM=dd.getMonth();months.appendChild(lab)}
-  const hd=el("div","hdays");["","Mon","","Wed","","Fri",""].forEach(t=>hd.appendChild(el("span","",t)));
+  const hd=el("div","hdays");["Mon","","Wed","","Fri","","Sun"].forEach(t=>hd.appendChild(el("span","",t)));
   const heat=el("div","heat");heat.setAttribute("role","img");heat.setAttribute("aria-label","Study activity over the last "+WEEKS+" weeks");
   for(let i=0;i<WEEKS*7;i++){
     const dk=key(addDays(start,i)),v=val(dk),o=m.get(dk);
