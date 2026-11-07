@@ -339,6 +339,7 @@ textarea.small{min-height:70px;background:var(--sheet);line-height:1.5}
 .datatools>summary{padding:14px 18px;color:var(--muted)}
 .dtin{padding:0 18px 16px;display:grid;gap:10px}
 label.btn{display:inline-block}
+.chip.cont{border-top-left-radius:0;border-bottom-left-radius:0;border-left-style:dotted}
 /* activity */
 .act{border:1px solid var(--rule);border-radius:10px;padding:16px;margin-top:14px;display:grid;gap:14px}
 .stats{display:flex;gap:32px;flex-wrap:wrap}
@@ -425,6 +426,7 @@ label.btn{display:inline-block}
               <span class="lbl">to</span>
               <input type="time" id="evEnd" aria-label="End time" value="10:00">
             </span>
+            <span id="spanRow" class="frow" hidden><span class="lbl">through</span><input type="date" id="evEndDate" aria-label="Last day (leave empty for one day)" title="Last day — leave empty for a one-day event"></span>
           </div>
           <div class="frow">
             <span class="lbl">Repeat</span>
@@ -557,7 +559,7 @@ const revealed=new Set();
 // ---- model ----
 function normEv(e){
   const t=(e.start!==undefined||e.allDay!==undefined)?{allDay:!!e.allDay,start:e.start||"",end:e.end||""}:{allDay:!e.time,start:e.time||"",end:""};
-  return{id:e.id||uid(),title:e.title||"",...t,color:e.color||"pink",goalId:e.goalId||"",note:e.note||"",private:!!e.private,done:!!e.done};
+  return{id:e.id||uid(),title:e.title||"",...t,color:e.color||"pink",goalId:e.goalId||"",note:e.note||"",private:!!e.private,done:!!e.done,endDate:t.allDay&&e.endDate?e.endDate:""};
 }
 function normRule(r){return{id:r.id||uid(),title:r.title||"",allDay:!!r.allDay,start:r.start||"",end:r.end||"",color:r.color||"pink",
   goalId:r.goalId||"",note:r.note||"",private:!!r.private,freq:r.freq==="daily"?"daily":"weekly",days:Array.isArray(r.days)?r.days.map(Number):[],
@@ -568,7 +570,13 @@ function isEmpty(v){return !v.events.length&&!v.todos.length&&!(v.memo||"").trim
 function occurs(r,k){if(k<r.from||(r.until&&k>r.until)||r.skip.includes(k))return false;return r.freq==="daily"||r.days.includes(parse(k).getDay())}
 function occ(r,k){return{id:r.id+"@"+k,ruleId:r.id,recurring:true,date:k,title:r.title,allDay:r.allDay,start:r.start,end:r.end,color:r.color,goalId:r.goalId,note:r.note,private:r.private,done:!!r.done[k]}}
 function sorted(evs){return [...evs].sort((a,b)=>(a.allDay?"0":"1"+(a.start||"99")).localeCompare(b.allDay?"0":"1"+(b.start||"99")))}
-function eventsOn(k){return sorted([...get(k).events.map(e=>({...e,date:k})),...rules.filter(r=>occurs(r,k)).map(r=>occ(r,k))])}
+let spanList=[];
+function buildSpans(){spanList=[];days.forEach((v,k)=>v.events.forEach(e=>{if(e.allDay&&e.endDate&&e.endDate>k)spanList.push({k,e})}))}
+function spanInfo(home,end,k){return{home,spanDay:dayDiff(home,k)+1,spanLen:dayDiff(home,end)+1}}
+function eventsOn(k){return sorted([
+  ...get(k).events.map(e=>({...e,date:k,home:k,...(e.allDay&&e.endDate&&e.endDate>k?spanInfo(k,e.endDate,k):{})})),
+  ...spanList.filter(s=>s.k<k&&k<=s.e.endDate).map(s=>({...s.e,date:k,...spanInfo(s.k,s.e.endDate,k)})),
+  ...rules.filter(r=>occurs(r,k)).map(r=>occ(r,k))])}
 const isHidden=e=>e.private&&!revealed.has(e.id);
 const shownTitle=e=>isHidden(e)?"Private":e.title;
 const goalOf=id=>id?goals.find(g=>g.id===id):null;
@@ -602,7 +610,7 @@ function changeGoals(fn){goals=clone(goals);fn(goals);render();persistStudy()}
 function changeRules(fn){rules=clone(rules);fn(rules);render();persistRules()}
 function setDone(e,val){
   if(e.recurring)changeRules(rs=>{const r=rs.find(r=>r.id===e.ruleId);if(!r)return;if(val)r.done[e.date]=true;else delete r.done[e.date]});
-  else change(e.date,v=>{const z=v.events.find(z=>z.id===e.id);if(z)z.done=val});
+  else change(e.home||e.date,v=>{const z=v.events.find(z=>z.id===e.id);if(z)z.done=val});
 }
 function moveEvent(a,b,id,s,en){
   const src=clone(get(a));const i=src.events.findIndex(z=>z.id===id);if(i<0)return;
@@ -623,6 +631,7 @@ function carryOver(){
 function chip(e){
   const h=isHidden(e);const x=el("div","chip"+(e.allDay?" all":"")+(h?" priv":"")+(e.done?" did":""));
   x.style.setProperty("--c",h?"var(--c-gray)":cvar(e.color));
+  if(e.spanLen&&e.spanDay>1)x.classList.add("cont");
   if(!e.allDay&&e.start)x.appendChild(el("span","t",e.start));
   x.appendChild(document.createTextNode((e.done?"✓ ":"")+shownTitle(e)));return x;
 }
@@ -754,6 +763,7 @@ function renderDay(){
       const tags=el("div","tags");
       if(e.recurring){const r=rules.find(r=>r.id===e.ruleId);tags.appendChild(el("span","tag","↻ "+(r?repeatLabel(r):"Repeats")))}
       const g=goalOf(e.goalId);if(g){const t=el("span","tag goal",g.name+(e.done?" · counted":""));t.style.setProperty("--c",cvar(g.color));tags.appendChild(t)}
+      if(e.spanLen)tags.appendChild(el("span","tag",short(e.home)+" – "+short(e.endDate)+" · day "+e.spanDay+" of "+e.spanLen));
       if(e.private)tags.appendChild(el("span","tag","Private"));
       if(tags.childNodes.length)main.appendChild(tags);
       if(e.note)main.appendChild(el("div","evnote",e.note));
@@ -768,7 +778,7 @@ function renderDay(){
       l.appendChild(box);
     }else l.appendChild(xbtn(h?"private event":e.title,()=>{
       if(e.recurring){confirmDel=e.id;renderDay();return}
-      if(editT&&editT.id===e.id)resetForm();change(selK,v=>{v.events=v.events.filter(z=>z.id!==e.id)})}));
+      if(editT&&editT.id===e.id)resetForm();change(e.home||selK,v=>{v.events=v.events.filter(z=>z.id!==e.id)})}));
     const go=()=>{if(isHidden(e)){revealed.add(e.id);render();return}startEdit(e)};
     l.addEventListener("click",go);l.addEventListener("keydown",ev=>{if(ev.key==="Enter"&&ev.target===l)go()});
     ul.appendChild(l);
@@ -792,14 +802,14 @@ function swatches(box,name,prefix){COLORS.forEach(([c,n],i)=>{const l=el("label"
 swatches($("gColors"),"gColor","gcol-");swatches($("evColors"),"evColor","col-");
 function setDaysChecked(a){WD.forEach((_,i)=>{$("wd-"+i).checked=a.includes(i)})}
 function fillGoals(){const s=$("evGoal"),v=s.value;s.textContent="";s.appendChild(new Option("None",""));goals.filter(linkable).forEach(g=>s.appendChild(new Option(g.name,g.id)));s.value=goals.some(g=>g.id===v&&linkable(g))?v:""}
-function syncForm(){const rp=$("evRepeat").value;$("timeRow").hidden=$("evAll").checked;$("repRow").hidden=rp==="none";$("evDays").hidden=rp!=="weekly";$("goalHint").hidden=!$("evGoal").value}
+function syncForm(){const rp=$("evRepeat").value;$("timeRow").hidden=$("evAll").checked;$("spanRow").hidden=!($("evAll").checked&&rp==="none");$("repRow").hidden=rp==="none";$("evDays").hidden=rp!=="weekly";$("goalHint").hidden=!$("evGoal").value}
 ["evAll","evRepeat","evGoal"].forEach(id=>$(id).addEventListener("change",syncForm));
 function resetForm(){editT=null;confirmDel=null;$("evTitle").value="";$("evAll").checked=false;$("evStart").value="09:00";$("evEnd").value="10:00";
-  $("evRepeat").value="none";setDaysChecked([parse(selK).getDay()]);$("evUntil").value="";fillGoals();$("evGoal").value="";$("evPrivate").checked=false;$("evNote").value="";
+  $("evEndDate").value="";$("evRepeat").value="none";setDaysChecked([parse(selK).getDay()]);$("evUntil").value="";fillGoals();$("evGoal").value="";$("evPrivate").checked=false;$("evNote").value="";
   $("col-pink").checked=true;$("evSubmit").textContent="Add event";$("evCancel").hidden=true;$("evErr").textContent="";$("ruleHint").hidden=true;syncForm()}
 function startEdit(e){
   confirmDel=null;const src=e.recurring?rules.find(r=>r.id===e.ruleId):e;if(!src)return;
-  editT=e.recurring?{kind:"rule",id:src.id}:{kind:"one",id:e.id,k:e.date};
+  editT=e.recurring?{kind:"rule",id:src.id}:{kind:"one",id:e.id,k:e.home||e.date};$("evEndDate").value=e.recurring?"":(src.endDate||"");
   $("evTitle").value=src.title;$("evAll").checked=src.allDay;$("evStart").value=src.start||"09:00";$("evEnd").value=src.end||"";
   $("evRepeat").value=e.recurring?src.freq:"none";setDaysChecked(e.recurring&&src.freq==="weekly"?src.days:[parse(e.date).getDay()]);$("evUntil").value=e.recurring?src.until:"";
   fillGoals();$("evGoal").value=goalOf(src.goalId)?src.goalId:"";$("evPrivate").checked=src.private;$("evNote").value=src.note||"";
@@ -819,7 +829,9 @@ $("evForm").addEventListener("submit",ev=>{ev.preventDefault();
   if(rp==="weekly"&&!dsel.length)return err("Pick at least one weekday to repeat on.");
   const from=t&&t.kind==="rule"?(rules.find(r=>r.id===t.id)||{}).from||selK:(t?t.k:selK);
   if(rp!=="none"&&until&&until<from)return err("The repeat end date must be on or after "+short(from)+".");
-  const data={title,allDay,start:allDay?"":start,end:allDay?"":end,color,goalId:$("evGoal").value,private:$("evPrivate").checked,note:$("evNote").value.trim()};
+  const homeK=t&&t.kind==="one"?t.k:selK,endDate=$("evEndDate").value;
+  if(allDay&&rp==="none"&&endDate&&endDate<homeK)return err("The last day must be on or after "+short(homeK)+".");
+  const data={title,allDay,endDate:allDay&&rp==="none"&&endDate>homeK?endDate:"",start:allDay?"":start,end:allDay?"":end,color,goalId:$("evGoal").value,private:$("evPrivate").checked,note:$("evNote").value.trim()};
   if(rp==="none"){
     if(t&&t.kind==="rule"){changeRules(rs=>{const i=rs.findIndex(r=>r.id===t.id);if(i>=0)rs.splice(i,1)});change(selK,v=>v.events.push({id:uid(),...data,done:false}))}
     else if(t)change(t.k,v=>{const z=v.events.find(z=>z.id===t.id);if(z)Object.assign(z,data)});
@@ -1012,7 +1024,7 @@ function renderSearch(){
     let k=r.from>todayK?r.from:todayK,n=0;while(!occurs(r,k)&&n<400){k=key(addDays(parse(k),1));n++}if(n>=400)k=r.from;
     res.push({k,kind:"Repeat",text:r.title,sub:repeatLabel(r)+(r.note?" · "+r.note:"")})});
   [...days.keys()].sort().reverse().forEach(k=>{const v=days.get(k);
-    v.events.forEach(e=>{if(!e.private&&(e.title+" "+e.note).toLowerCase().includes(q))res.push({k,kind:"Event",text:e.title,sub:timeLabel(e)+(e.note?" · "+e.note:"")})});
+    v.events.forEach(e=>{if(!e.private&&(e.title+" "+e.note).toLowerCase().includes(q))res.push({k,kind:"Event",text:e.title,sub:timeLabel(e)+(e.endDate?" through "+short(e.endDate):"")+(e.note?" · "+e.note:"")})});
     v.todos.forEach(t=>{if(t.text.toLowerCase().includes(q))res.push({k,kind:"To-do",text:t.text,sub:t.done?"Done":"Open"})});
     if((v.memo||"").toLowerCase().includes(q))res.push({k,kind:"Note",text:snippet(v.memo,q),sub:""})});
   $("resCount").textContent=res.length?res.length+" result"+(res.length>1?"s":""):"No matches";
@@ -1030,7 +1042,7 @@ $("qClear").onclick=()=>{$("q").value="";renderSearch()};
 
 // ---- nav ----
 function render(){
-  fillGoals();syncForm();
+  buildSpans();fillGoals();syncForm();
   if(mode==="week"){renderWeek();renderDay()}else if(mode==="study")renderStudy();else{renderMini();renderDay()}
   if(!$("searchView").hidden)renderSearch();
 }

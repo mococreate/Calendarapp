@@ -1,7 +1,7 @@
 // Offline support for Calendar.
 // App files are served from the cache first and refreshed in the background.
 // Bump VERSION whenever you change index.html so phones pick up the new copy.
-const VERSION = "v1";
+const VERSION = "v2";
 const APP_CACHE = "calendar-app-" + VERSION;
 const FONT_CACHE = "calendar-fonts";
 const APP_FILES = [
