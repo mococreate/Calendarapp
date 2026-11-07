@@ -1,7 +1,8 @@
 // Offline support for Calendar.
-// App files are served from the cache first and refreshed in the background.
-// Bump VERSION whenever you change index.html so phones pick up the new copy.
-const VERSION = "v2";
+// When online, opening the app always loads the newest index.html from the server.
+// When offline, it falls back to the copy saved on the device.
+// Bump VERSION whenever you change files so the saved copies are refreshed too.
+const VERSION = "v3";
 const APP_CACHE = "calendar-app-" + VERSION;
 const FONT_CACHE = "calendar-fonts";
 const APP_FILES = [
@@ -40,6 +41,20 @@ function staleWhileRevalidate(cacheName, request, fallbackUrl) {
   );
 }
 
+function networkFirstPage() {
+  const page = new Request("./index.html", { cache: "no-cache" });
+  return caches.open(APP_CACHE).then((cache) => {
+    const fromNet = fetch(page).then((res) => {
+      if (res && res.ok) cache.put("./index.html", res.clone());
+      return res;
+    });
+    const timeout = new Promise((resolve) => setTimeout(resolve, 3000));
+    return Promise.race([fromNet, timeout.then(() => cache.match("./index.html"))])
+      .then((res) => res || fromNet)
+      .catch(() => cache.match("./index.html"));
+  });
+}
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
@@ -52,9 +67,9 @@ self.addEventListener("fetch", (event) => {
   }
   if (url.origin !== self.location.origin) return;
 
-  // Opening the app (any hash) always gets the cached page, even offline.
+  // Opening the app: newest page when online (3 s limit), saved copy when offline.
   if (req.mode === "navigate") {
-    event.respondWith(staleWhileRevalidate(APP_CACHE, new Request("./index.html"), "./index.html"));
+    event.respondWith(networkFirstPage());
     return;
   }
   event.respondWith(staleWhileRevalidate(APP_CACHE, req));

@@ -1114,7 +1114,13 @@ $("bkPasteGo").onclick=()=>{const t=$("bkPaste").value.trim();if(t)restore(t)};
 
 // ---- offline ----
 if("serviceWorker" in navigator&&location.protocol!=="file:"){
-  window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+  const hadCtl=!!navigator.serviceWorker.controller;let reloading=false;
+  // a newer version took over: reload once so it shows right away
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{if(!hadCtl||reloading)return;reloading=true;location.reload()});
+  window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js",{updateViaCache:"none"}).then(reg=>{
+    // check for a new version every time the app comes back to the screen
+    document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")reg.update().catch(()=>{})});
+  }).catch(()=>{}));
 }
 })();
 </script>
